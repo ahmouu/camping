@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CampCount V4 (Mobile)</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+        body { background-color: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        
+        /* 手機版優化樣式 */
+        .container { max-width: 600px; padding: 0; } /* 限制最大寬度，模擬 App 質感 */
+        .mobile-header {
+            background-color: white;
+            padding: 15px;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        
+        /* 分頁按鈕樣式 */
+        .nav-pills .nav-link {
+            border-radius: 50px;
+            color: #6c757d;
+            font-weight: 500;
+            padding: 8px 15px;
+            margin: 0 2px;
+            font-size: 0.9rem;
+        }
+        .nav-pills .nav-link.active {
+            background-color: #198754; /* 綠色主色調 */
+            color: white;
+            font-weight: bold;
+        }
+        
+        /* 卡片與列表優化 */
+        .content-area { padding: 15px; padding-bottom: 80px; }
+        .card { border-radius: 12px; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.03); margin-bottom: 15px; }
+        .form-control, .form-select, .btn { height: 48px; border-radius: 10px; font-size: 16px; } /* 加大觸控區 */
+        .btn-sm { height: 32px; font-size: 13px; }
+        
+        /* 列表項目 */
+        .list-group-item {
+            border: none;
+            border-bottom: 1px solid #f0f0f0;
+            padding: 12px 5px;
+            background: transparent;
+        }
+
+        /* 結算數字顏色 */
+        .balance-plus { color: #198754; font-weight: bold; background: #e8f5e9; padding: 2px 8px; border-radius: 4px; }
+        .balance-minus { color: #dc3545; font-weight: bold; background: #fdecea; padding: 2px 8px; border-radius: 4px; }
+        
+        /* 載入動畫 */
+        .spinner-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 2000; justify-content: center; align-items: center; }
+    </style>
+</head>
+<body>
+
+<div id="loadingOverlay" class="spinner-overlay">
+    <div class="spinner-border text-success" role="status"></div>
+</div>
+
+<div class="container">
+
+    <div id="page-list">
+        <div class="bg-success text-white p-4 mb-3 text-center" style="border-bottom-left-radius: 20px; border-bottom-right-radius: 20px;">
+            <h2 class="fw-bold m-0">⛺ CampCount</h2>
+            <small class="opacity-75">輕鬆紀錄露營開支</small>
+        </div>
+
+        <div class="px-3">
+            <div class="card p-3 mb-4">
+                <h6 class="fw-bold text-secondary mb-3">📅 建立新活動</h6>
+                <div class="row g-2">
+                    <div class="col-6"><input type="date" id="newStartDate" class="form-control"></div>
+                    <div class="col-6"><input type="date" id="newEndDate" class="form-control"></div>
+                    <div class="col-12"><input type="text" id="newLoc" class="form-control" placeholder="輸入地點 (例: 苗栗星空)"></div>
+                    <div class="col-12"><button onclick="createTrip()" class="btn btn-dark w-100 fw-bold">＋ 建立活動</button></div>
+                </div>
+            </div>
+            
+            <h6 class="ms-1 text-muted fw-bold">歷史紀錄</h6>
+            <div id="tripList" class="list-group pb-5"></div>
+        </div>
+    </div>
+
+    <div id="page-detail" style="display: none;">
+        
+        <div class="mobile-header">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <button onclick="showList()" class="btn btn-outline-secondary btn-sm rounded-pill px-3">← 返回</button>
+                <div class="text-center" style="line-height: 1.2;">
+                    <strong id="detailTitle" class="d-block fs-5"></strong>
+                    <small id="detailDate" class="text-muted" style="font-size: 0.75rem;"></small>
+                </div>
+                <button onclick="deleteCurrentTrip()" class="btn btn-light text-danger btn-sm rounded-circle" style="width:32px; height:32px;">🗑️</button>
+            </div>
+
+            <ul class="nav nav-pills nav-fill" id="myTab" role="tablist">
+                <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#tab-people">👥 人員</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-expense">💰 記帳</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-gear">⛺ 裝備</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-balance">🧮 結算</button></li>
+            </ul>
+        </div>
+
+        <div class="tab-content content-area" id="myTabContent">
+            
+            <div class="tab-pane fade show active" id="tab-people">
+                <div class="card p-3">
+                    <label class="form-label fw-bold">新增參加者</label>
+                    <div class="input-group mb-3">
+                        <input type="text" id="newPerson" class="form-control" placeholder="輸入姓名">
+                        <button onclick="addParticipant()" class="btn btn-primary px-4">加入</button>
+                    </div>
+                    <div class="alert alert-light border small text-muted">
+                        💡 提示：請先加入所有人員，才能開始記帳喔！
+                    </div>
+                </div>
+                <h6 class="fw-bold ms-1">參加名單</h6>
+                <div id="participantList" class="d-flex flex-column gap-2"></div>
+            </div>
+
+            <div class="tab-pane fade" id="tab-expense">
+                <div class="card p-3 bg-white">
+                    <label class="form-label fw-bold">新增一筆支出</label>
+                    <div class="row g-2">
+                        <div class="col-8"><input type="text" id="expItem" class="form-control" placeholder="品項 (如: 食材)"></div>
+                        <div class="col-4"><input type="number" inputmode="numeric" id="expCost" class="form-control" placeholder="$金額"></div>
+                        <div class="col-12"><select id="expPayer" class="form-select text-center fw-bold text-success"><option>誰付錢?</option></select></div>
+                        <div class="col-12"><button onclick="addExpense()" class="btn btn-success w-100">＋ 儲存支出</button></div>
+                    </div>
+                </div>
+                
+                <div class="d-flex justify-content-between align-items-end mb-2 px-1">
+                    <h6 class="fw-bold m-0">支出明細</h6>
+                    <small class="text-muted">總支出: $<span id="miniTotal">0</span></small>
+                </div>
+                <ul id="expenseList" class="list-group bg-white rounded-3 shadow-sm"></ul>
+            </div>
+
+            <div class="tab-pane fade" id="tab-gear">
+                <div class="card p-3">
+                    <label class="form-label fw-bold">登記公用裝備</label>
+                    <div class="row g-2">
+                        <div class="col-8"><input type="text" id="gearItem" class="form-control" placeholder="裝備名稱"></div>
+                        <div class="col-4"><input type="number" inputmode="numeric" id="gearQty" class="form-control" placeholder="數量" value="1"></div>
+                        <div class="col-12"><select id="gearProvider" class="form-select text-center fw-bold text-info"><option>誰提供?</option></select></div>
+                        <div class="col-12"><button onclick="addGear()" class="btn btn-info text-white w-100">＋ 加入清單</button></div>
+                    </div>
+                </div>
+                <h6 class="fw-bold ms-1">裝備清單</h6>
+                <ul id="gearList" class="list-group bg-white rounded-3 shadow-sm"></ul>
+            </div>
+
+            <div class="tab-pane fade" id="tab-balance">
+                <div class="card p-4 text-center mb-3" style="background: #e9ecef;">
+                    <h1 class="display-4 fw-bold text-dark">$<span id="totalCost">0</span></h1>
+                    <p class="text-muted mb-0">總支出 / <span id="peopleCountDisplay">0</span> 人</p>
+                    <div class="mt-2 badge bg-dark fs-6">平均每人 $<span id="avgCost">0</span></div>
+                </div>
+
+                <div class="card p-0 overflow-hidden">
+                    <div class="card-header bg-white fw-bold py-3">💰 結算表 (多退少補)</div>
+                    <ul id="balanceList" class="list-group list-group-flush"></ul>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, arrayUnion, deleteDoc } 
+    from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+
+    // ---------------------------------------------------------
+    // 🔥 請在此處貼上您的 Firebase Config
+    // ---------------------------------------------------------
+    const firebaseConfig = {
+    apiKey: "AIzaSyDURgPj3n3Sbf1LJ9UUYdIZgogx1PB3RFA",
+    authDomain: "campapp-1ef27.firebaseapp.com",
+    projectId: "campapp-1ef27",
+    storageBucket: "campapp-1ef27.firebasestorage.app",
+    messagingSenderId: "675381855392",
+    appId: "1:675381855392:web:3168fa7bd761b46d95f5c5",
+    measurementId: "G-8NEWVV6BBN"
+  };
+    // ---------------------------------------------------------
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    let currentTripId = null;
+    let currentTripData = null;
+
+    // 全域綁定
+    window.createTrip = createTrip;
+    window.showList = showList;
+    window.addParticipant = addParticipant;
+    window.addExpense = addExpense;
+    window.addGear = addGear;
+    window.togglePaid = togglePaid;
+    window.deleteExpense = deleteExpense;
+    window.deleteParticipant = deleteParticipant;
+    window.deleteGear = deleteGear;
+    window.deleteCurrentTrip = deleteCurrentTrip;
+
+    // UI Loading 控制
+    const toggleLoading = (show) => document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none';
+
+    // 1. 列表監聽
+    onSnapshot(collection(db, "trips"), (snapshot) => {
+        const listEl = document.getElementById('tripList');
+        listEl.innerHTML = "";
+        
+        let trips = [];
+        snapshot.forEach(doc => trips.push({id: doc.id, ...doc.data()}));
+        trips.sort((a, b) => new Date(b.startDate || b.date) - new Date(a.startDate || a.date));
+
+        const today = new Date();
+        today.setHours(0,0,0,0);
+
+        trips.forEach(trip => {
+            const start = trip.startDate || trip.date;
+            const end = trip.endDate || trip.date;
+            const isFinished = new Date(end) < today;
+            
+            const statusBadge = isFinished 
+                ? `<span class="badge bg-secondary">已結束</span>` 
+                : `<span class="badge bg-success">進行中</span>`;
+
+            listEl.innerHTML += `
+                <div onclick="window.loadTrip('${trip.id}')" class="card p-3 mb-2 shadow-sm" style="cursor:pointer; border-left: 5px solid ${isFinished ? '#6c757d' : '#198754'}">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="fw-bold mb-1 text-dark">${trip.location}</h5>
+                            <small class="text-muted">📅 ${start} ~ ${end}</small>
+                        </div>
+                        <div class="text-end">
+                            ${statusBadge}
+                            <div class="text-muted small mt-1"> > </div>
+                        </div>
+                    </div>
+                </div>`;
+        });
+    });
+
+    // 2. 建立
+    async function createTrip() {
+        const start = document.getElementById('newStartDate').value;
+        const end = document.getElementById('newEndDate').value;
+        const loc = document.getElementById('newLoc').value;
+        
+        if(!start || !end || !loc) return alert("請輸入完整資料");
+        if(start > end) return alert("結束日期錯誤");
+
+        toggleLoading(true);
+        await addDoc(collection(db, "trips"), {
+            startDate: start, endDate: end, date: start, location: loc,
+            participants: [], expenses: [], gears: []
+        });
+        document.getElementById('newLoc').value = '';
+        toggleLoading(false);
+    }
+
+    async function deleteCurrentTrip() {
+        if(!confirm("確定要刪除整個活動？無法復原！")) return;
+        toggleLoading(true);
+        await deleteDoc(doc(db, "trips", currentTripId));
+        toggleLoading(false);
+        showList();
+    }
+
+    // 3. 載入詳情
+    window.loadTrip = function(id) {
+        currentTripId = id;
+        document.getElementById('page-list').style.display = 'none';
+        document.getElementById('page-detail').style.display = 'block';
+        window.scrollTo(0,0);
+        
+        // 重置 Tabs 到第一個
+        const firstTab = new bootstrap.Tab(document.querySelector('#myTab button[data-bs-target="#tab-people"]'));
+        firstTab.show();
+
+        onSnapshot(doc(db, "trips", id), (docSnap) => {
+            if (!docSnap.exists()) { showList(); return; }
+            currentTripData = docSnap.data();
+            renderDetail();
+        });
+    }
+
+    function showList() {
+        document.getElementById('page-list').style.display = 'block';
+        document.getElementById('page-detail').style.display = 'none';
+        currentTripId = null;
+    }
+
+    function renderDetail() {
+        const d = currentTripData;
+        document.getElementById('detailTitle').innerText = d.location;
+        document.getElementById('detailDate').innerText = `${d.startDate || d.date} ~ ${d.endDate || d.date}`;
+
+        // 下拉選單
+        const payerSelect = document.getElementById('expPayer');
+        const gearSelect = document.getElementById('gearProvider');
+        const savedPayer = payerSelect.value;
+        
+        payerSelect.innerHTML = '<option disabled selected>誰付錢?</option>';
+        gearSelect.innerHTML = '<option disabled selected>誰提供?</option>';
+        
+        // 1. 人員名單
+        const pList = document.getElementById('participantList');
+        pList.innerHTML = '';
+        d.participants.forEach((p, idx) => {
+            pList.innerHTML += `
+                <div class="card p-3 mb-1 d-flex flex-row justify-content-between align-items-center shadow-sm">
+                    <span class="fw-bold fs-5">${p.name}</span>
+                    <button onclick="deleteParticipant(${idx})" class="btn btn-outline-danger btn-sm rounded-pill">移除</button>
+                </div>`;
+            payerSelect.innerHTML += `<option value="${p.name}">${p.name}</option>`;
+            gearSelect.innerHTML += `<option value="${p.name}">${p.name}</option>`;
+        });
+        if(savedPayer && savedPayer !== '誰付錢?') payerSelect.value = savedPayer;
+
+        // 2. 支出名單
+        const expList = document.getElementById('expenseList');
+        const totalCost = d.expenses.reduce((sum, e) => sum + Number(e.cost), 0);
+        document.getElementById('miniTotal').innerText = totalCost; // 小計顯示
+        
+        expList.innerHTML = d.expenses.length ? '' : '<li class="text-center py-4 text-muted">尚未有支出紀錄</li>';
+        d.expenses.forEach((e, idx) => {
+            expList.innerHTML += `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="fw-bold fs-5">${e.item}</div>
+                        <small class="text-muted">由 ${e.payer} 支付</small>
+                    </div>
+                    <div class="text-end">
+                        <div class="fw-bold text-success">$${e.cost}</div>
+                        <button onclick="deleteExpense(${idx})" class="btn btn-link text-danger p-0 small text-decoration-none" style="font-size:12px">刪除</button>
+                    </div>
+                </li>`;
+        });
+
+        // 3. 裝備名單
+        const gList = document.getElementById('gearList');
+        gList.innerHTML = d.gears.length ? '' : '<li class="text-center py-4 text-muted">尚未有裝備紀錄</li>';
+        d.gears.forEach((g, idx) => {
+            gList.innerHTML += `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="fw-bold">${g.item}</span> <span class="badge bg-secondary rounded-pill">x${g.quantity || 1}</span>
+                        <div class="small text-info">${g.provider} 提供</div>
+                    </div>
+                    <button onclick="deleteGear(${idx})" class="btn btn-sm btn-outline-light text-secondary border-0">✕</button>
+                </li>`;
+        });
+
+        // 4. 結算
+        const peopleCount = d.participants.length;
+        const avgCost = peopleCount > 0 ? totalCost / peopleCount : 0;
+        document.getElementById('totalCost').innerText = totalCost;
+        document.getElementById('peopleCountDisplay').innerText = peopleCount;
+        document.getElementById('avgCost').innerText = Math.round(avgCost);
+
+        const balList = document.getElementById('balanceList');
+        balList.innerHTML = '';
+        
+        d.participants.forEach((p, index) => {
+            const paid = d.expenses.filter(e => e.payer === p.name).reduce((sum, e) => sum + Number(e.cost), 0);
+            const balance = paid - avgCost;
+            
+            let balanceUi = '';
+            if (balance > 1) balanceUi = `<span class="balance-plus">應收 $${Math.round(balance)}</span>`;
+            else if (balance < -1) balanceUi = `<span class="balance-minus">應付 $${Math.round(Math.abs(balance))}</span>`;
+            else balanceUi = `<span class="text-muted">平帳</span>`;
+
+            balList.innerHTML += `
+                <li class="list-group-item d-flex justify-content-between align-items-center py-3">
+                    <div>
+                        <div class="fw-bold fs-5">${p.name}</div>
+                        <small class="text-muted">已墊付 $${paid}</small>
+                    </div>
+                    <div class="text-end">
+                        <div class="mb-2">${balanceUi}</div>
+                        <button onclick="togglePaid(${index})" class="btn btn-sm ${p.status === 'paid' ? 'btn-success' : 'btn-outline-secondary'} rounded-pill px-3">
+                            ${p.status === 'paid' ? '✅ 已結清' : '等待付款'}
+                        </button>
+                    </div>
+                </li>`;
+        });
+    }
+
+    // --- 寫入邏輯 ---
+    async function addParticipant() {
+        const name = document.getElementById('newPerson').value;
+        if(!name) return;
+        await updateDoc(doc(db, "trips", currentTripId), { participants: arrayUnion({ name: name, status: 'unpaid' }) });
+        document.getElementById('newPerson').value = '';
+    }
+
+    async function addExpense() {
+        const item = document.getElementById('expItem').value;
+        const cost = document.getElementById('expCost').value;
+        const payer = document.getElementById('expPayer').value;
+        if(!item || !cost || payer === '誰付錢?') return alert("資料不完整");
+        await updateDoc(doc(db, "trips", currentTripId), { expenses: arrayUnion({ item, cost: Number(cost), payer }) });
+        document.getElementById('expItem').value = '';
+        document.getElementById('expCost').value = '';
+    }
+
+    async function addGear() {
+        const item = document.getElementById('gearItem').value;
+        const qty = document.getElementById('gearQty').value;
+        const provider = document.getElementById('gearProvider').value;
+        if(!item || provider === '誰提供?') return alert("資料不完整");
+        await updateDoc(doc(db, "trips", currentTripId), { gears: arrayUnion({ item, quantity: Number(qty) || 1, provider }) });
+        document.getElementById('gearItem').value = '';
+        document.getElementById('gearQty').value = '1';
+    }
+
+    async function deleteItemFromArray(field, index) {
+        if(!confirm("確定刪除？")) return;
+        const newList = [...currentTripData[field]];
+        newList.splice(index, 1);
+        await updateDoc(doc(db, "trips", currentTripId), { [field]: newList });
+    }
+
+    async function deleteParticipant(index) {
+        const name = currentTripData.participants[index].name;
+        if(currentTripData.expenses.some(e => e.payer === name)) return alert(`無法刪除 ${name}，因為他有付款紀錄。`);
+        await deleteItemFromArray('participants', index);
+    }
+    async function deleteExpense(index) { await deleteItemFromArray('expenses', index); }
+    async function deleteGear(index) { await deleteItemFromArray('gears', index); }
+
+    async function togglePaid(index) {
+        const newParticipants = [...currentTripData.participants];
+        newParticipants[index].status = newParticipants[index].status === 'paid' ? 'unpaid' : 'paid';
+        await updateDoc(doc(db, "trips", currentTripId), { participants: newParticipants });
+    }
+</script>
+</body>
+</html>
